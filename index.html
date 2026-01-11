@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Scoreboard Pro</title>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <style>
+        /* --- 1. GLOBALE VARIABLEN & BASIS --- */
+        :root {
+            --bg: #F2F2F7;
+            --secondary-bg: #FFFFFF;
+            --accent: #007AFF;
+            --home: #007AFF;
+            --guest: #FF9500;
+            --success: #34C759;
+            --text: #000000;
+            --text-secondary: #8E8E93;
+            --glass: rgba(250, 250, 252, 0.9);
+            --border: rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+        }
+
+        html, body {
+            height: 100%; 
+            margin: 0; 
+            padding: 0; 
+            overflow: hidden; 
+            background-color: var(--bg);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+            touch-action: none;
+            display: flex; 
+            flex-direction: column; 
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* --- 2. AUTH & OVERLAYS --- */
+        #authOverlay, #parentNameOverlay {
+            position: fixed; 
+            inset: 0; 
+            background: #F2F2F7; 
+            z-index: 99999;
+            display: flex; 
+            justify-content: center; 
+            align-items: center;
+        }
+
+        .auth-card {
+            background: white; 
+            width: 90%; 
+            max-width: 400px; 
+            border-radius: 25px;
+            padding: 25px; 
+            box-shadow: 0 20px 40px rgba(0,0,0,.15);
+        }
+
+        .auth-card h2 {
+            margin-top: 0;
+            text-align: center;
+        }
+
+        .auth-card input {
+            width: 100%; 
+            padding: 14px; 
+            margin-bottom: 12px; 
+            border-radius: 12px;
+            border: none; 
+            background: #F2F2F7; 
+            box-sizing: border-box;
+            font-size: 16px;
+        }
+
+        .auth-card button {
+            width: 100%; 
+            padding: 15px; 
+            border-radius: 14px; 
+            border: none;
+            background: var(--accent); 
+            color: white; 
+            font-weight: 700; 
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .auth-switch { 
+            text-align: center; 
+            margin-top: 12px; 
+            color: var(--accent); 
+            font-weight: 600; 
+            cursor: pointer; 
+        }
+
+        .auth-small { 
+            text-align: center; 
+            margin-top: 12px; 
+            font-size: 12px; 
+            color: #8E8E93; 
+            cursor: pointer; 
+        }
+
+        /* --- 3. HEADER & TIMER --- */
+        #headerContainer {
+            flex-shrink: 0; 
+            z-index: 1000; 
+            background: var(--glass);
+            backdrop-filter: blur(50px) saturate(210%); 
+            -webkit-backdrop-filter: blur(50px) saturate(210%);
+            border-bottom: 0.5px solid var(--border); 
+            padding-bottom: 10px; 
+            position: relative;
+        }
+
+        #menuBtn { 
+            position: absolute; 
+            left: 20px; 
+            top: 22px; 
+            width: 24px; 
+            cursor: pointer; 
+            z-index: 101; 
+        }
+
+        #menuBtn span { 
+            height: 2.5px; 
+            width: 100%; 
+            background: var(--accent); 
+            border-radius: 10px; 
+            display: block; 
+            margin-bottom: 5px; 
+        }
+        
+        #topBar { 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            padding-top: 15px; 
+        }
+
+        #timerContainer { 
+            position: relative; 
+            width: 140px; 
+            height: 140px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+        }
+
+        #timer { 
+            font-size: 55px; 
+            font-weight: 900; 
+            font-variant-numeric: tabular-nums; 
+            letter-spacing: -2px; 
+            color: var(--text); 
+            cursor: pointer; 
+            z-index: 50; 
+        }
+
+        #circleSvg { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            transform: rotate(-90deg); 
+            width: 140px; 
+            height: 140px; 
+            z-index: 10; 
+        }
+
+        #circleBg { 
+            fill: none; 
+            stroke: rgba(0, 0, 0, 0.05); 
+            stroke-width: 10; 
+        }
+
+        #circleProgress { 
+            fill: none; 
+            stroke: var(--success); 
+            stroke-width: 10; 
+            stroke-linecap: round; 
+            transition: stroke-dashoffset 1s linear; 
+            stroke-dasharray: 440; 
+            stroke-dashoffset: 440; 
+        }
+
+        #statsRow { 
+            display: flex; 
+            gap: 20px; 
+            font-size: 11px; 
+            font-weight: 700; 
+            color: var(--text-secondary); 
+            margin: 5px 0 10px; 
+            text-transform: uppercase; 
+        }
+
+        #headerControls { 
+            display: flex; 
+            gap: 8px; 
+            width: 92%; 
+            margin: 0 auto; 
+        }
+
+        .btn-control { 
+            flex: 1; 
+            padding: 12px; 
+            border-radius: 12px; 
+            border: none; 
+            font-weight: 600; 
+            font-size: 14px; 
+            background: rgba(0,0,0,0.05); 
+            color: var(--text); 
+            cursor: pointer; 
+        }
+
+        #startBtn { 
+            background: var(--accent); 
+            color: white; 
+        }
+
+        button:active, .btn-control:active {
+            transform: scale(0.97);
+            transition: transform 0.1s ease;
+        }
+
+        /* --- 4. NAVIGATION & MENÜ --- */
+        #menuSlider { 
+            max-height: 0; 
+            overflow: hidden; 
+            transition: 0.4s ease; 
+            background: white; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            gap: 12px; 
+        }
+
+        #menuSlider.open { 
+            max-height: 600px; 
+            padding: 20px 0; 
+            border-bottom: 0.5px solid var(--border); 
+        }
+
+        .mode-selector { 
+            display: flex; 
+            background: #E9E9EB; 
+            border-radius: 10px; 
+            padding: 2px; 
+            width: 90%; 
+            margin: 5px 0; 
+        }
+
+        .mode-btn { 
+            flex: 1; 
+            border: none; 
+            padding: 8px; 
+            border-radius: 8px; 
+            font-size: 12px; 
+            font-weight: 700; 
+            cursor: pointer; 
+            transition: 0.2s; 
+            background: transparent; 
+            color: var(--text-secondary); 
+        }
+
+        .mode-btn.active { 
+            background: var(--accent); 
+            color: white; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+        }
+
+        .switch { 
+            position: relative; 
+            display: inline-block; 
+            width: 44px; 
+            height: 26px; 
+        }
+
+        .slider { 
+            position: absolute; 
+            cursor: pointer; 
+            inset: 0; 
+            background: #E9E9EB; 
+            transition: .4s; 
+            border-radius: 31px; 
+        }
+
+        .slider:before { 
+            position: absolute; 
+            content: ""; 
+            height: 22px; 
+            width: 22px; 
+            left: 2px; 
+            bottom: 2px; 
+            background: white; 
+            transition: .4s; 
+            border-radius: 50%; 
+        }
+
+        input:checked + .slider { 
+            background: #34C759; 
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(18px);
+        }
+
+        /* --- 5. SCOREBOARD MAIN AREA --- */
+        #mainContent { 
+            flex-grow: 1; 
+            position: relative; 
+            overflow: hidden; 
+        }
+
+        #homeScreen { 
+            height: 100%; 
+            padding: 16px; 
+            box-sizing: border-box; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+        }
+
+        #scoreboard { 
+            display: flex; 
+            gap: 10px; 
+            width: 100%; 
+            justify-content: center; 
+        }
+
+        .team-card { 
+            flex: 1; 
+            background: var(--secondary-bg); 
+            border-radius: 24px; 
+            padding: 15px 12px;
+            text-align: center; 
+            border: 0.5px solid var(--border); 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.04);
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            min-height: 140px; 
+            position: relative;
+        }
+
+        .score-container { 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 5px; 
+            width: 100%; 
+            order: 1; 
+        }
+
+        .score { 
+            font-size: 40px; 
+            font-weight: 800; 
+            margin: 5px 0; 
+            color: var(--text); 
+        }
+
+        .undo-icon-btn { 
+            background: none; 
+            border: none; 
+            color: #FF3B30; 
+            font-size: 18px; 
+            cursor: pointer; 
+            padding: 5px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+        }
+
+        .team-label { 
+            font-size: 12px; 
+            font-weight: 600; 
+            color: var(--text-secondary); 
+            order: 0; 
+            cursor: pointer; 
+        }
+
+        .goal-btn-main { 
+            width: 100%; 
+            padding: 15px 10px; 
+            border-radius: 16px; 
+            border: none; 
+            font-weight: 800; 
+            color: white; 
+            font-size: 18px; 
+            cursor: pointer; 
+            order: 2; 
+        }
+
+        .player-slide-area { 
+            width: 100%; 
+            max-height: 0; 
+            overflow: hidden; 
+            transition: 0.35s ease; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 6px; 
+            order: 3; 
+        }
+
+        .player-slide-area.open { 
+            max-height: 200px; 
+            margin-top: 10px; 
+            overflow-y: auto; 
+        }
+
+        .player-choice-btn { 
+            background: var(--bg); 
+            border-radius: 12px; 
+            padding: 12px; 
+            font-weight: 700; 
+            font-size: 14px; 
+            color: var(--accent); 
+            cursor: pointer; 
+            border: none;
+        }
+
+        /* --- 6. SIDE PANELS --- */
+        .side-panel { 
+            position: absolute; 
+            top: 0; 
+            left: 100%; 
+            width: 100%; 
+            height: 100%; 
+            background: var(--bg); 
+            z-index: 2000; 
+            transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); 
+            display: flex; 
+            flex-direction: column; 
+        }
+
+        .side-panel.open { 
+            transform: translateX(-100%); 
+        }
+
+        .panel-header { 
+            padding: 10px 15px 15px; 
+            background: var(--secondary-bg); 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            border-bottom: 0.5px solid var(--border); 
+        }
+
+        .panel-header-top { 
+            width: 100%; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+
+        .panel-content { 
+            flex-grow: 1; 
+            overflow-y: auto; 
+            padding: 15px; 
+            position: relative; 
+        }
+
+        .grabber { 
+            width: 40px; 
+            height: 5px; 
+            background: #D1D1D6; 
+            border-radius: 10px; 
+            margin-bottom: 15px; 
+        }
+
+        .list-item { 
+            background: var(--secondary-bg); 
+            padding: 16px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            border-bottom: 0.5px solid var(--border); 
+        }
+
+        .panel-player-picker {
+            background: white;
+            border-radius: 12px;
+            padding: 10px;
+            margin-bottom: 15px;
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        /* --- 7. EMOJI ANIMATIONS --- */
+        .flying-emoji {
+            position: fixed; 
+            bottom: -50px; 
+            z-index: 10000;
+            pointer-events: none; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center;
+            animation: flyUp 3s ease-out forwards;
+        }
+
+        .emoji-bubble { 
+            font-size: 32px; 
+        }
+
+        .emoji-name { 
+            font-size: 10px; 
+            font-weight: 800; 
+            background: rgba(0,0,0,0.6); 
+            color: white; 
+            padding: 2px 8px; 
+            border-radius: 10px; 
+            white-space: nowrap; 
+            margin-bottom: 2px;
+        }
+
+        @keyframes flyUp {
+            0% { transform: translateY(0) scale(0.5); opacity: 0; }
+            10% { opacity: 1; }
+            100% { transform: translateY(-100vh) translateX(calc(var(--randX) * 1px)); opacity: 0; }
+        }
+
+        #reactionBar {
+            position: fixed; 
+            bottom: 25px; 
+            left: 50%; 
+            transform: translateX(-50%);
+            background: var(--glass); 
+            backdrop-filter: blur(20px); 
+            -webkit-backdrop-filter: blur(20px);
+            padding: 8px 15px; 
+            border-radius: 30px; 
+            display: flex; 
+            gap: 12px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1); 
+            z-index: 5000; 
+            border: 0.5px solid var(--border);
+        }
+
+        .react-btn { 
+            font-size: 24px; 
+            cursor: pointer; 
+            transition: transform 0.2s; 
+        }
+
+        .react-btn:active { 
+            transform: scale(1.4); 
+        }
+
+        /* --- 8. MODALS & TOOLS --- */
+        .modal-overlay { 
+            position: fixed; 
+            inset: 0; 
+            background: rgba(0,0,0,0.4); 
+            backdrop-filter: blur(10px); 
+            display: none; 
+            justify-content: center; 
+            align-items: center; 
+            z-index: 3000; 
+        }
+
+        .modal-win { 
+            background: white; 
+            border-radius: 25px; 
+            padding: 25px; 
+            width: 85%; 
+            max-height: 80vh; 
+            display: flex; 
+            flex-direction: column; 
+        }
+
+        #mdlInps { 
+            overflow-y: auto; 
+            margin: 10px 0; 
+            flex-grow: 1; 
+        }
+
+        .modal-win input { 
+            width: 100%; 
+            padding: 12px; 
+            box-sizing: border-box; 
+            margin: 8px 0; 
+            border-radius: 10px; 
+            background: var(--bg); 
+            border: none; 
+            font-size: 16px; 
+        }
+
+        .livestream-share { 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+            color: var(--accent); 
+            font-weight: 700; 
+            font-size: 14px; 
+            cursor: pointer; 
+            padding: 10px 20px; 
+            background: rgba(0, 122, 255, 0.1); 
+            border-radius: 12px; 
+            margin-top: 5px; 
+        }
+
+        .tournament-only { 
+            display: none; 
+        }
+        
+        /* --- 9. ADMIN & PARENT VIEW --- */
+        .admin-badge { 
+            background: #FF3B30; 
+            color: white; 
+            padding: 2px 8px; 
+            border-radius: 5px; 
+            font-size: 10px; 
+            margin-left: 5px; 
+        }
+
+        .user-item { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            padding: 12px; 
+            border-bottom: 0.5px solid rgba(0,0,0,0.1); 
+        }
+
+        .delete-user-btn { 
+            background: #FF3B30; 
+            color: white; 
+            border: none; 
+            padding: 5px 10px; 
+            border-radius: 8px; 
+            font-size: 11px; 
+            font-weight: bold; 
+            cursor: pointer;
+        }
+        
+        .parent-view-active #menuBtn, 
+        .parent-view-active #headerControls, 
+        .parent-view-active .undo-icon-btn, 
+        .parent-view-active .goal-btn-main,
+        .parent-view-active .team-label::after { 
+            display: none !important; 
+        }
+
+        /* --- 10. ELTERN TOOLBAR --- */
+        .fab-container {
+            position: fixed;
+            bottom: 25px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #007AFF 0%, #5856D6 100%);
+            box-shadow: 0 8px 25px rgba(0, 122, 255, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            display: none; 
+            justify-content: center;
+            align-items: center;
+            z-index: 6001;
+            transition: all 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            cursor: pointer;
+        }
+
+        .fab-icon {
+            color: white;
+            font-size: 28px;
+            font-weight: 300;
+            line-height: 1;
+            transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .apple-toolbar {
+            position: fixed;
+            bottom: 25px;
+            right: 20px;
+            min-height: 50px;
+            width: 60px; 
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(30px) saturate(200%);
+            -webkit-backdrop-filter: blur(30px) saturate(200%);
+            border: 0.5px solid rgba(255, 255, 255, 0.5);
+            border-radius: 25px;
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 0;
+            z-index: 6000;
+            opacity: 0;
+            pointer-events: none;
+            transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease, filter 0.4s ease;
+            filter: blur(8px);
+            padding: 8px;
+            overflow: hidden;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.12);
+            transform-origin: right center;
+        }
+
+        .apple-toolbar.open {
+            opacity: 1;
+            width: 200px; 
+            filter: blur(0px);
+            pointer-events: auto;
+        }
+
+        .parent-view-active .fab-container { 
+            display: flex; 
+        }
+
+        .toolbar-btn {
+            background: white;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .toolbar-btn.primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        /* --- 11. LOADING & ANIMATIONS --- */
+        .loading-spinner {
+            border: 3px solid var(--bg);
+            border-top: 3px solid var(--accent);
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .swipe-hint {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 13px;
+            margin-top: 15px;
+            opacity: 0.6;
+        }
+
+        /* --- 12. OFFLINE INDICATOR --- */
+        .offline-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #FF3B30;
+            color: white;
+            padding: 8px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 10000;
+            display: none;
+        }
+
+        .offline-banner.show { display: block; }
+    </style>
+</head>
+<body id="swipeZone">
+
+    <div class="offline-banner" id="offlineBanner">
+        ⚠️ Keine Verbindung - Daten werden lokal gepuffert
+    </div>
+
+    <div id="reactionBar">
+        <div class="react-btn" onclick="sendReaction('⚽')">⚽</div>
+        <div class="react-btn" onclick="sendReaction('👏')">👏</div>
+        <div class="react-btn" onclick="sendReaction('🔥')">🔥</div>
+        <div class="react-btn" onclick="sendReaction('🙌')">🙌</div>
+    </div>
+
+    <div id="parentNameOverlay" style="display:none">
+        <div class="auth-card">
+            <h2>Willkommen</h2>
+            <p style="text-align:center; color:#8E8E93; font-size:14px; margin-bottom:15px;">Gib deinen Namen für den Livestream ein.</p>
+            <input id="parentNameInput" placeholder="Dein Name">
+            <button onclick="saveParentName()">Zum Livestream</button>
+        </div>
+    </div>
+
+    <div id="authOverlay">
+        <div class="auth-card" id="loginCard">
+            <h2>Trainer Login</h2>
+            <input id="loginNick" placeholder="Nickname">
+            <input id="loginPass" type="password" placeholder="Passwort">
+            <button onclick="login()">Login</button>
+            <div class="auth-switch" onclick="showRegister()">Registrieren</div>
+            <div class="auth-small" onclick="showReset()">Passwort vergessen?</div>
+        </div>
+
+        <div class="auth-card" id="registerCard" style="display:none">
+            <h2>Registrierung</h2>
+            <input id="regClub" placeholder="Verein">
+            <input id="regTeam" placeholder="Mannschaft">
+            <input id="regName" placeholder="Trainer Name">
+            <input id="regNick" placeholder="Nickname">
+            <input id="regPass" type="password" placeholder="Passwort">
+            <button onclick="register()">Account erstellen</button>
+            <div class="auth-switch" onclick="showLogin()">Zurück</div>
+        </div>
+
+        <div class="auth-card" id="resetCard" style="display:none">
+            <h2>Passwort zurücksetzen</h2>
+            <input id="resetClub" placeholder="Verein">
+            <input id="resetNick" placeholder="Nickname">
+            <input id="resetPass" type="password" placeholder="Neues Passwort">
+            <button onclick="resetPassword()">Zurücksetzen</button>
+            <div class="auth-switch" onclick="showLogin()">Zurück</div>
+        </div>
+    </div>
+
+    <div id="headerContainer">
+        <div id="menuBtn" onclick="toggleMenu()"><span></span><span></span><span></span></div>
+        
+        <div id="menuSlider">
+            <div class="livestream-share" onclick="shareLiveLink()">Livestream teilen</div>
+            <div style="display:flex; align-items:center; gap:15px; font-weight:600; margin-top: 5px;">
+                Turnier-Modus 
+                <label class="switch">
+                    <input type="checkbox" id="modeTgl" onchange="toggleTourn()">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="mode-selector">
+                <button id="modeHalf" class="mode-btn active" onclick="setTimerMode(false)">Hälfte (1/2)</button>
+                <button id="modeReal" class="mode-btn" onclick="setTimerMode(true)">Echtzeit (1:1)</button>
+            </div>
+            <div style="font-size:14px; font-weight: 700;">
+                Dauer: 
+                <input type="number" id="minInput" value="14" step="0.5" oninput="liveTimerUpdate()" 
+                       style="width:60px; border:none; color:var(--accent); font-weight:800; text-align:center; background:transparent;"> 
+                Min
+            </div>
+            <div style="display:flex; gap:10px; width: 90%;">
+                <button class="btn-control" style="background: var(--home); color: white;" onclick="openRoster('home')">Heim Kader</button>
+                <button class="btn-control" style="background: var(--guest); color: white;" onclick="openRoster('guest')">Gast Kader</button>
+            </div>
+            <button id="adminMenuBtn" class="btn-control" style="display:none; background:#FF3B30; color:white; margin-top:5px;" onclick="openAdminPanel()">Admin Bereich</button>
+            <button class="btn-control" style="color:var(--text-secondary); background:none; font-size:12px;" onclick="clearStorage()">Alles löschen</button>
+        </div>
+        
+        <div id="topBar">
+            <div id="timerContainer">
+                <svg id="circleSvg" viewBox="0 0 180 180">
+                    <circle id="circleBg" cx="90" cy="90" r="70"></circle>
+                    <circle id="circleProgress" cx="90" cy="90" r="70"></circle>
+                </svg>
+                <div id="timer" onclick="manualTimerEdit()">07:00</div>
+            </div>
+            <div id="statsRow">
+                <div>HZ <span id="hzLabel">1</span></div>
+                <div>Total <span id="gameTimeLabel">00:00</span></div>
+            </div>
+        </div>
+
+        <div id="headerControls">
+            <button id="startBtn" class="btn-control">Start</button>
+            <button id="hz2Btn" class="btn-control" style="background:white; border: 0.5px solid var(--border);">2. HZ</button>
+            <button id="resetBtn" class="btn-control" style="opacity:0.4;" onclick="resetScoreboard()">Reset</button>
+        </div>
+    </div>
+
+    <div id="mainContent">
+        <div id="homeScreen">
+            <div id="scoreboard">
+                <div class="team-card">
+                    <div id="name-home" class="team-label" onclick="openTeamRename('home')">Heim ✎</div>
+                    <div class="score-container">
+                        <div id="homeScore" class="score">0</div>
+                        <button class="undo-icon-btn" onclick="undoSpecificAction('home')">↺</button>
+                    </div>
+                    <button class="goal-btn-main" style="background:var(--home)" onclick="handleGoalClick('home')">TOR</button>
+                    <div class="player-slide-area" id="homeSlide"></div>
+                </div>
+                <div class="team-card">
+                    <div id="name-guest" class="team-label" onclick="openTeamRename('guest')">Gast ✎</div>
+                    <div class="score-container">
+                        <div id="guestScore" class="score">0</div>
+                        <button class="undo-icon-btn" onclick="undoSpecificAction('guest')">↺</button>
+                    </div>
+                    <button class="goal-btn-main" style="background:var(--guest)" onclick="handleGoalClick('guest')">TOR</button>
+                    <div class="player-slide-area" id="guestSlide"></div>
+                </div>
+            </div>
+
+            <div class="tournament-only" style="flex-direction:column; gap:10px; width:100%;">
+                <button class="btn-control" style="background:var(--success); color:white; padding:15px;" onclick="saveCurrentGame()">Spiel Speichern</button>
+                <button class="btn-control" style="background:white; border:0.5px solid var(--border); padding:15px;" onclick="generateReport()">Bericht kopieren</button>
+            </div>
+
+            <div class="swipe-hint">← Swipe für Details</div>
+        </div>
+
+        <div id="panel-protocol" class="side-panel">
+            <div class="panel-header">
+                <div class="grabber"></div>
+                <div class="panel-header-top"><h2>Protokoll</h2><span style="color:var(--accent)" onclick="closeAllPanels()">Schließen</span></div>
+            </div>
+            <div class="panel-content"><div id="protocolList"></div></div>
+        </div>
+
+        <div id="panel-stats" class="side-panel">
+            <div class="panel-header">
+                <div class="grabber"></div>
+                <div class="panel-header-top"><h2>Top-Scorer</h2><span style="color:var(--accent)" onclick="closeAllPanels()">Schließen</span></div>
+            </div>
+            <div class="panel-content"><div id="topScorers"></div></div>
+        </div>
+
+        <div id="panel-saved" class="side-panel">
+            <div class="panel-header">
+                <div class="grabber"></div>
+                <div class="panel-header-top"><h2>Gespeicherte</h2><span style="color:var(--accent)" onclick="closeAllPanels()">Schließen</span></div>
+            </div>
+            <div class="panel-content" id="savedGamesList"></div>
+        </div>
+
+        <div id="panel-admin" class="side-panel">
+            <div class="panel-header">
+                <div class="grabber"></div>
+                <div class="panel-header-top"><h2>Admin-Verwaltung</h2><span style="color:var(--accent)" onclick="closeAllPanels()">Schließen</span></div>
+            </div>
+            <div class="panel-content" id="adminUserList"></div>
+        </div>
+    </div>
+
+    <div id="rosterMdl" class="modal-overlay">
+        <div class="modal-win">
+            <h3 id="mdlTitle"></h3>
+            <div id="mdlInps"></div>
+            <button onclick="addInp()" style="width:100%; padding:10px; color:var(--accent); background:none; border:none; font-weight:600;">+ Name</button>
+            <button id="mdlSaveBtn" style="width:100%; margin-top:20px; background:var(--accent); color:white; padding:15px; border-radius:12px; border:none; font-weight:700;">Fertig</button>
+        </div>
+    </div>
+
+    <div id="parentFab" class="fab-container" onclick="toggleParentToolbar()">
+        <div class="fab-icon">⋯</div>
+    </div>
+
+    <div id="parentToolbar" class="apple-toolbar">
+        <button class="toolbar-btn primary" onclick="openProtocolFromToolbar()">📋 Protokoll</button>
+        <button class="toolbar-btn" onclick="openStatsFromToolbar()">📊 Statistiken</button>
+        <button class="toolbar-btn" onclick="shareLiveLink()">🔗 Teilen</button>
+    </div>
+
+<script>
+/* ============================================================
+   FIREBASE INITIALISIERUNG
+   ============================================================ */
+const firebaseConfig = {
+    apiKey: "AIzaSyAvwmCiI8qSjrXMPoNT9nh5tHVzly0KwhU",
+    authDomain: "tableropro-2c537.firebaseapp.com",
+    databaseURL: "https://tableropro-2c537-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "tableropro-2c537",
+    storageBucket: "tableropro-2c537.firebasestorage.app",
+    messagingSenderId: "1079668572910",
+    appId: "1:1079668572910:web:16ce38b1058e375a25e9ff"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+/* ============================================================
+   GLOBALE VARIABLEN & STATE
+   ============================================================ */
+let sLeft = 0, gSec = 0, running = false, timerId = null, scH = 0, scG = 0, actT = "";
+let playerStats = {}, rosters = { home: [], guest: [] };
+let teamNames = { home: "Heim", guest: "Gast" }, savedGames = [];
+let isRealTimeMode = false, isAdmin = false, isParentView = false;
+let currentUserNick = "demo", lastReactionId = 0;
+
+const panels = ['panel-protocol', 'panel-stats', 'panel-saved', 'panel-admin'];
+let currentPanelIndex = -1;
+
+/* ============================================================
+   CORE FUNKTIONEN (TIMER, UI, HELPERS)
+   ============================================================ */
+const fmt = (s) => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
+
+function updateCircle() {
+    const val = parseFloat(document.getElementById("minInput").value) || 14;
+    const total = (isRealTimeMode ? val : val / 2) * 60;
+    if (total > 0) {
+        const pct = ((total - sLeft) / total);
+        document.getElementById("circleProgress").style.strokeDashoffset = 440 - (pct * 440);
+    }
+}
+
+function liveTimerUpdate() {
+    if(running || isParentView) return;
+    const val = parseFloat(document.getElementById("minInput").value) || 14;
+    sLeft = Math.floor((isRealTimeMode ? val : val / 2) * 60);
+    document.getElementById("timer").textContent = fmt(sLeft);
+    updateCircle();
+}
+
+function tick() {
+    if (sLeft <= 0) {
+        clearInterval(timerId); running = false;
+        document.getElementById("startBtn").textContent = "START";
+        return;
+    }
+    sLeft--; gSec++;
+    document.getElementById("timer").textContent = fmt(sLeft);
+    document.getElementById("gameTimeLabel").textContent = fmt(gSec);
+    updateCircle();
+    if (gSec % 2 === 0) pushToFirebase(); // Alle 2 Sekunden Sync
+}
+
+/* ============================================================
+   FIREBASE SYNC LOGIK
+   ============================================================ */
+function pushToFirebase() {
+    if (isParentView) return;
+    db.ref('games/' + currentUserNick).set({
+        scH, scG, sLeft, gSec, 
+        hz: document.getElementById("hzLabel").textContent,
+        teamNames, rosters, playerStats,
+        protocol: Array.from(document.querySelectorAll("#protocolList .list-item")).map(el => ({
+            html: el.innerHTML,
+            team: el.dataset.team,
+            player: el.dataset.player
+        })),
+        lastUpdate: firebase.database.ServerValue.TIMESTAMP
+    });
+}
+
+function startFirebaseSync(nick) {
+    db.ref('games/' + nick).on('value', (snap) => {
+        const data = snap.val();
+        if (data && isParentView) {
+            scH = data.scH; scG = data.scG;
+            sLeft = data.sLeft; gSec = data.gSec;
+            teamNames = data.teamNames; rosters = data.rosters;
+            playerStats = data.playerStats || {};
+            
+            document.getElementById("homeScore").textContent = scH;
+            document.getElementById("guestScore").textContent = scG;
+            document.getElementById("timer").textContent = fmt(sLeft);
+            document.getElementById("gameTimeLabel").textContent = fmt(gSec);
+            document.getElementById("hzLabel").textContent = data.hz;
+            document.getElementById("name-home").textContent = teamNames.home;
+            document.getElementById("name-guest").textContent = teamNames.guest;
+            
+            const list = document.getElementById("protocolList");
+            list.innerHTML = "";
+            (data.protocol || []).forEach(entry => {
+                const div = document.createElement("div");
+                div.className = "list-item";
+                div.dataset.team = entry.team;
+                div.dataset.player = entry.player;
+                div.innerHTML = entry.html;
+                list.appendChild(div);
+            });
+            updateStatsUI();
+            updateCircle();
+        }
+    });
+
+    // Reaktionen hören
+    db.ref('reactions/' + nick).limitToLast(1).on('child_added', (snap) => {
+        const r = snap.val();
+        if (r && r.time > Date.now() - 2000) createEmojiAnimation(r.emoji, r.name);
+    });
+}
+
+/* ============================================================
+   SPIEL-AKTIONEN (TOR, UNDO, RESET)
+   ============================================================ */
+function handleGoalClick(team) {
+    if(isParentView) return;
+    const slide = document.getElementById(team + 'Slide');
+    const isOpen = slide.classList.contains('open');
+    document.querySelectorAll('.player-slide-area').forEach(s => s.classList.remove('open'));
+    
+    if(rosters[team].length === 0) { confirmGoal(team, teamNames[team]); return; }
+    
+    if(!isOpen) {
+        slide.innerHTML = "";
+        rosters[team].forEach(n => {
+            const b = document.createElement("button");
+            b.className = "player-choice-btn";
+            b.textContent = n;
+            b.onclick = () => confirmGoal(team, n);
+            slide.appendChild(b);
+        });
+        slide.classList.add('open');
+    }
+}
+
+function confirmGoal(team, pName) {
+    team === 'home' ? scH++ : scG++;
+    document.getElementById(team + "Score").textContent = (team === 'home' ? scH : scG);
+    
+    const div = document.createElement("div");
+    div.className = "list-item";
+    div.dataset.team = team;
+    div.dataset.player = pName;
+    div.innerHTML = `<span><b>${pName}</b> ${team === 'home'?'🔵':'🟠'}</span><span style="color:var(--accent)">${fmt(gSec)}</span>`;
+    document.getElementById("protocolList").prepend(div);
+    
+    if(pName !== teamNames.home && pName !== teamNames.guest) {
+        playerStats[pName] = (playerStats[pName] || 0) + 1;
+    }
+    
+    document.querySelectorAll('.player-slide-area').forEach(s => s.classList.remove('open'));
+    updateStatsUI();
+    pushToFirebase();
+    sendReaction('⚽');
+}
+
+function undoSpecificAction(team) {
+    if(isParentView) return;
+    const entries = Array.from(document.querySelectorAll("#protocolList .list-item"));
+    const lastEntry = entries.find(el => el.dataset.team === team);
+    
+    if (lastEntry && confirm(`Tor von ${lastEntry.dataset.player} löschen?`)) {
+        team === 'home' ? scH-- : scG--;
+        document.getElementById(team + "Score").textContent = (team === 'home' ? scH : scG);
+        const p = lastEntry.dataset.player;
+        if(playerStats[p]) { playerStats[p]--; if(playerStats[p]<=0) delete playerStats[p]; }
+        lastEntry.remove();
+        updateStatsUI();
+        pushToFirebase();
+    }
+}
+
+function resetScoreboard() {
+    if(isParentView || !confirm("Alles zurücksetzen?")) return;
+    clearInterval(timerId); running = false;
+    scH = 0; scG = 0; gSec = 0; playerStats = {};
+    document.getElementById("homeScore").textContent = "0";
+    document.getElementById("guestScore").textContent = "0";
+    document.getElementById("gameTimeLabel").textContent = "00:00";
+    document.getElementById("hzLabel").textContent = "1";
+    document.getElementById("startBtn").textContent = "START";
+    document.getElementById("protocolList").innerHTML = "";
+    liveTimerUpdate();
+    updateStatsUI();
+    pushToFirebase();
+}
+
+/* ============================================================
+   UI & NAVIGATION
+   ============================================================ */
+function toggleMenu() { document.getElementById('menuSlider').classList.toggle('open'); }
+function closeAllPanels() { panels.forEach(id => document.getElementById(id).classList.remove('open')); currentPanelIndex = -1; }
+
+function updateStatsUI() {
+    const d = document.getElementById("topScorers");
+    d.innerHTML = "";
+    Object.entries(playerStats).sort((a,b)=>b[1]-a[1]).forEach(([n,g])=>{
+        const i = document.createElement("div"); i.className = "list-item";
+        i.innerHTML = `<span>${n}</span><strong>${g}</strong>`;
+        d.appendChild(i);
+    });
+}
+
+// Swipe Logik
+let startX = 0;
+document.addEventListener('touchstart', e => startX = e.touches[0].clientX);
+document.addEventListener('touchend', e => {
+    const diff = startX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 70) {
+        if (diff > 0 && currentPanelIndex < (isAdmin?3:2)) {
+            currentPanelIndex++; openPanel(panels[currentPanelIndex]);
+        } else if (diff < 0 && currentPanelIndex >= 0) {
+            closePanel(panels[currentPanelIndex]); currentPanelIndex--;
+        }
+    }
+});
+
+function openPanel(id) { document.getElementById(id).classList.add('open'); }
+function closePanel(id) { document.getElementById(id).classList.remove('open'); }
+
+/* ============================================================
+   AUTH & LOGIN
+   ============================================================ */
+function login() {
+    const nick = document.getElementById('loginNick').value.trim();
+    const pass = document.getElementById('loginPass').value;
+    if(!nick || !pass) return;
+
+    if(nick === "Admin" && pass === "Admin123") {
+        isAdmin = true; document.getElementById("adminMenuBtn").style.display="block";
+        document.getElementById('authOverlay').style.display="none";
+        return;
+    }
+    currentUserNick = nick;
+    document.getElementById('authOverlay').style.display="none";
+    startFirebaseSync(nick);
+    pushToFirebase();
+}
+
+function register() {
+    alert("In dieser Version ist der Nickname direkt dein Login!");
+    showLogin();
+}
+
+function showLogin() { 
+    document.getElementById('loginCard').style.display="block";
+    document.getElementById('registerCard').style.display="none";
+}
+function showRegister() {
+    document.getElementById('loginCard').style.display="none";
+    document.getElementById('registerCard').style.display="block";
+}
+
+/* ============================================================
+   LIVESTREAM & REAKTIONEN
+   ============================================================ */
+function sendReaction(emoji) {
+    const name = isParentView ? (localStorage.getItem('p_name') || "Gast") : "Trainer";
+    db.ref('reactions/' + currentUserNick).push({ emoji, name, time: Date.now() });
+}
+
+function createEmojiAnimation(emoji, name) {
+    const div = document.createElement('div');
+    div.className = 'flying-emoji';
+    div.style.left = (Math.random() * 60 + 20) + '%';
+    div.style.setProperty('--randX', Math.random() * 200 - 100);
+    div.innerHTML = `<div class="emoji-name">${name}</div><div class="emoji-bubble">${emoji}</div>`;
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 3000);
+}
+
+function shareLiveLink() {
+    const url = window.location.origin + window.location.pathname + "?view=" + currentUserNick;
+    if(navigator.share) navigator.share({title:'Live Score', url});
+    else { alert("Link kopiert: " + url); navigator.clipboard.writeText(url); }
+}
+
+function saveParentName() {
+    const n = document.getElementById('parentNameInput').value;
+    if(n) { localStorage.setItem('p_name', n); document.getElementById('parentNameOverlay').style.display="none"; }
+}
+
+function toggleParentToolbar() {
+    document.getElementById('parentFab').classList.toggle('open');
+    document.getElementById('parentToolbar').classList.toggle('open');
+}
+
+function openProtocolFromToolbar() { toggleParentToolbar(); currentPanelIndex=0; openPanel(panels[0]); }
+function openStatsFromToolbar() { toggleParentToolbar(); currentPanelIndex=1; openPanel(panels[1]); }
+
+/* ============================================================
+   SONSTIGE FUNKTIONEN (ROSTER, RENAME, SAVING)
+   ============================================================ */
+function openRoster(team) {
+    if(isParentView) return;
+    actT = team; document.getElementById("mdlTitle").textContent = "Kader " + teamNames[team];
+    const box = document.getElementById("mdlInps"); box.innerHTML = "";
+    rosters[team].forEach(n => addInp(n));
+    if(rosters[team].length===0) for(let i=0;i<3;i++) addInp();
+    document.getElementById("mdlSaveBtn").onclick = () => {
+        rosters[actT] = Array.from(box.querySelectorAll("input")).map(i=>i.value.trim()).filter(v=>v);
+        document.getElementById("rosterMdl").style.display="none";
+        pushToFirebase();
+    };
+    document.getElementById("rosterMdl").style.display="flex";
+}
+
+function addInp(v="") {
+    const i = document.createElement("input"); i.value = v; i.placeholder = "Spieler Name...";
+    document.getElementById("mdlInps").appendChild(i);
+}
+
+function openTeamRename(team) {
+    if(isParentView) return;
+    const n = prompt("Neuer Name für " + teamNames[team], teamNames[team]);
+    if(n) { teamNames[team] = n; document.getElementById("name-"+team).innerHTML = n + " ✎"; pushToFirebase(); }
+}
+
+function setTimerMode(isReal) {
+    isRealTimeMode = isReal;
+    document.getElementById("modeHalf").classList.toggle("active", !isReal);
+    document.getElementById("modeReal").classList.toggle("active", isReal);
+    liveTimerUpdate();
+}
+
+function toggleTourn() {
+    const isT = document.getElementById('modeTgl').checked;
+    document.querySelectorAll('.tournament-only').forEach(el => el.style.display = isT ? 'flex' : 'none');
+}
+
+document.getElementById("startBtn").onclick = function() {
+    if(isParentView) return;
+    if(!running) {
+        if(sLeft<=0) liveTimerUpdate();
+        timerId = setInterval(tick, 1000); running = true; this.textContent = "PAUSE";
+    } else {
+        clearInterval(timerId); running = false; this.textContent = "WEITER";
+    }
+    pushToFirebase();
+};
+
+document.getElementById("hz2Btn").onclick = () => {
+    if(isParentView || !confirm("2. Halbzeit?")) return;
+    document.getElementById("hzLabel").textContent = "2";
+    liveTimerUpdate(); pushToFirebase();
+};
+
+function clearStorage() {
+    if(confirm("Alle lokalen Trainer-Accounts löschen?")) { localStorage.clear(); location.reload(); }
+}
+
+window.onload = () => {
+    const params = new URLSearchParams(window.location.search);
+    if(params.has('view')) {
+        isParentView = true; currentUserNick = params.get('view');
+        document.body.classList.add('parent-view-active');
+        document.getElementById('authOverlay').style.display="none";
+        if(!localStorage.getItem('p_name')) document.getElementById('parentNameOverlay').style.display="flex";
+        startFirebaseSync(currentUserNick);
+    }
+};
+/* ============================================================
+   SPIEL SPEICHERN & BERICHT (TURNIER-MODUS)
+   ============================================================ */
+function saveCurrentGame() {
+    if(isParentView) return;
+    const gameData = {
+        date: new Date().toLocaleString(),
+        home: teamNames.home,
+        guest: teamNames.guest,
+        score: `${scH}:${scG}`,
+        protocol: Array.from(document.querySelectorAll("#protocolList .list-item")).map(el => el.innerText)
+    };
+    
+    // Lokal und bei Firebase speichern
+    db.ref('saved_games/' + currentUserNick).push(gameData);
+    alert("Spiel erfolgreich gespeichert!");
+    updateSavedGamesUI();
+}
+
+function updateSavedGamesUI() {
+    db.ref('saved_games/' + currentUserNick).on('value', (snap) => {
+        const list = document.getElementById("savedGamesList");
+        list.innerHTML = "";
+        const data = snap.val();
+        if(data) {
+            Object.values(data).reverse().forEach(game => {
+                const div = document.createElement("div");
+                div.className = "list-item";
+                div.innerHTML = `
+                    <div style="display:flex; flex-direction:column;">
+                        <span style="font-size:10px; color:var(--text-secondary)">${game.date}</span>
+                        <b>${game.home} vs. ${game.guest}</b>
+                        <span style="color:var(--accent); font-weight:800;">${game.score}</span>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+    });
+}
+
+function generateReport() {
+    let report = `Spielbericht: ${teamNames.home} ${scH}:${scG} ${teamNames.guest}\n`;
+    report += `Gesamtzeit: ${fmt(gSec)}\n\nEvents:\n`;
+    const events = Array.from(document.querySelectorAll("#protocolList .list-item"));
+    events.forEach(el => {
+        report += `- ${el.innerText}\n`;
+    });
+    
+    navigator.clipboard.writeText(report).then(() => {
+        alert("Bericht für WhatsApp kopiert!");
+    });
+}
+
+// Initialisierung beim Laden hinzufügen
+window.addEventListener('load', () => {
+    if(currentUserNick) updateSavedGamesUI();
+});
+
+</script>
+</body>
+</html>
